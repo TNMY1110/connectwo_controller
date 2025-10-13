@@ -79,6 +79,7 @@
 #include "main.h"
 #include "stdlib.h"
 #include "data_struct.h"
+#include "AuCAR_conf.h"
 
 
 #ifndef BOOL

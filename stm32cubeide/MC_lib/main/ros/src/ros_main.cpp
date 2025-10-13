@@ -311,6 +311,7 @@ void ros_run(void) {
 			publishImuMsg();
 			pastTick[imu_index] = nowTick[imu_index];
 		}
+
 		nh.spinOnce();
     }
 }
@@ -347,6 +348,7 @@ void timer10ms(void) {
         motor[2].motorControl(target_r);
         motor[3].motorControl(target_r);
     }
+
 }
 
 void timer15us(void) {

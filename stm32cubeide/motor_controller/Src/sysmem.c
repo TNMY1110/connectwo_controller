@@ -49,6 +49,9 @@
 /* Includes */
 #include <errno.h>
 #include <stdio.h>
+#include <sys/types.h>
+/* typedef caddr_t */
+typedef char * caddr_t;
 
 /* Variables */
 extern int errno;

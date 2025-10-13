@@ -1,0 +1,25 @@
+# 프로젝트 구조 분석 스크립트
+cd /home/anton/projects/connectwo-controller
+
+echo "=== 📁 프로젝트 구조 확인 ==="
+ls -la
+
+echo -e "\n=== 📄 .ioc 파일 찾기 ==="
+find . -name "*.ioc" -type f
+
+echo -e "\n=== 📄 소스 파일 구조 ==="
+find . -name "*.c" -o -name "*.h" | head -20
+
+echo -e "\n=== 📄 기존 빌드 설정 파일 확인 ==="
+ls -la | grep -E "\.(project|cproject|launch|cfg)$"
+
+echo -e "\n=== 📄 메인 소스 파일 확인 ==="
+find . -name "main.c" -o -name "main.h"
+
+echo -e "\n=== 📄 ROS 관련 파일 찾기 ==="
+find . -name "*ros*" -type f
+
+echo -e "\n=== 📁 Core 디렉토리 구조 ==="
+if [ -d "Core" ]; then
+    tree Core/ || find Core/ -type f | head -10
+fi

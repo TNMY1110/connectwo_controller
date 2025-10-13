@@ -1,0 +1,156 @@
+# motor_controller CMakeLists.txt
+cmake_minimum_required(VERSION 3.22)
+
+# 크로스 컴파일 설정 (반드시 project() 전에 위치)
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+
+# 툴체인 설정
+set(CMAKE_C_COMPILER arm-none-eabi-gcc)
+set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
+set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
+set(CMAKE_AR arm-none-eabi-ar)
+set(CMAKE_OBJCOPY arm-none-eabi-objcopy)
+set(CMAKE_OBJDUMP arm-none-eabi-objdump)
+set(SIZE arm-none-eabi-size)
+
+# 컴파일러 테스트 비활성화 (크로스 컴파일용)
+set(CMAKE_C_COMPILER_FORCED TRUE)
+set(CMAKE_CXX_COMPILER_FORCED TRUE)
+
+# 프로젝트 설정
+project(motor_controller C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# MCU 설정
+set(MCU_FAMILY STM32F4xx)
+set(MCU_MODEL STM32F446xx)
+
+set(CPU_PARAMETERS "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
+
+# 컴파일 플래그
+set(COMMON_FLAGS "${CPU_PARAMETERS} -Wall -Wextra -Wpedantic -Wshadow -Wdouble-promotion -Wformat=2 -Wundef -fno-common -Wno-unused-parameter")
+set(CMAKE_C_FLAGS "${COMMON_FLAGS} -std=gnu11")
+set(CMAKE_CXX_FLAGS "${COMMON_FLAGS} -std=gnu++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics")
+set(CMAKE_ASM_FLAGS "${COMMON_FLAGS} -x assembler-with-cpp -MMD -MP")
+
+# 링커 플래그
+set(LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/STM32F446RETX_FLASH.ld)
+set(CMAKE_EXE_LINKER_FLAGS "${CPU_PARAMETERS} -T${LINKER_SCRIPT} --specs=nano.specs -Wl,--gc-sections -static --specs=nosys.specs -Wl,--start-group -lc -lm -Wl,--end-group -Wl,--print-memory-usage")
+
+# 디버그/릴리즈 설정
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -g0")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -g0")
+
+# 프리프로세서 정의
+add_definitions(
+    -DUSE_HAL_DRIVER
+    -D${MCU_MODEL}
+    -DDEBUG
+)
+
+# HAL 드라이버 다운로드 및 설정
+set(HAL_DRIVER_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Drivers)
+if(NOT EXISTS ${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver)
+    message(STATUS "HAL 드라이버를 다운로드합니다...")
+    file(MAKE_DIRECTORY ${HAL_DRIVER_PATH})
+    # 실제 프로젝트에서는 HAL 드라이버를 수동으로 복사하거나 STM32CubeMX로 생성
+endif()
+
+# Include 디렉토리
+include_directories(
+    Inc
+    Src
+    # HAL 드라이버 (있는 경우)
+    ${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver/Inc
+    ${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver/Inc/Legacy
+    ${HAL_DRIVER_PATH}/CMSIS/Device/ST/STM32F4xx/Include
+    ${HAL_DRIVER_PATH}/CMSIS/Core/Include
+    # 기존 ROS 라이브러리
+    # MC_lib 라이브러리 경로들
+    ../MC_lib/lib/inc
+    ../MC_lib/lib/periph
+    ../MC_lib/main
+    ../MC_lib/main/ros/inc
+    ../MC_lib/ROS
+)
+
+# 소스 파일 수집 (템플릿 파일 제외)
+file(GLOB_RECURSE SOURCES
+    "Src/*.c"
+    "Src/*.cpp"
+    "../MC_lib/main/ros/src/*.cpp"
+    "../MC_lib/main/*.cpp"
+    "../MC_lib/lib/src/*.c"
+    "../MC_lib/lib/src/*.cpp"
+    "../MC_lib/ROS/*.cpp"
+)
+
+# HAL 드라이버 소스 (템플릿 파일 제외)
+file(GLOB HAL_SOURCES "${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver/Src/*.c")
+list(FILTER HAL_SOURCES EXCLUDE REGEX ".*template.*")
+
+# 백업 파일 및 디렉토리 제외
+list(FILTER SOURCES EXCLUDE REGEX ".*\\.backup.*|.*\\.bak|.*\\.orig|.*\\.modified|.*~")
+list(FILTER SOURCES EXCLUDE REGEX ".*_backup.*|.*backup_.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/\\._backups/.*")
+list(APPEND SOURCES ${HAL_SOURCES})
+
+# 스타트업 파일
+set(STARTUP_FILE Startup/startup_stm32f446retx.s)
+
+# 소스 파일 확인 및 출력
+message(STATUS "발견된 소스 파일:")
+foreach(source ${SOURCES})
+    message(STATUS "  ${source}")
+endforeach()
+
+# 실행 파일 생성
+add_executable(${PROJECT_NAME}.elf
+    ${SOURCES}
+    ${STARTUP_FILE}
+)
+
+# HEX 및 BIN 파일 생성
+add_custom_command(TARGET ${PROJECT_NAME}.elf POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${PROJECT_NAME}.elf> ${PROJECT_NAME}.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${PROJECT_NAME}.elf> ${PROJECT_NAME}.bin
+    COMMENT "Building ${PROJECT_NAME}.hex and ${PROJECT_NAME}.bin")
+
+# 메모리 사용량 출력
+add_custom_command(TARGET ${PROJECT_NAME}.elf POST_BUILD
+    COMMAND ${SIZE} $<TARGET_FILE:${PROJECT_NAME}.elf>
+    COMMENT "Calculating size")
+
+# 플래시 타겟
+add_custom_target(flash
+    COMMAND st-flash write ${PROJECT_NAME}.bin 0x8000000
+    DEPENDS ${PROJECT_NAME}.elf
+    COMMENT "Flashing ${PROJECT_NAME}.bin to STM32F446RE")
+
+# 시리얼 모니터 타겟
+add_custom_target(monitor
+    COMMAND screen /dev/ttyUSB0 115200
+    DEPENDS ${PROJECT_NAME}.elf
+    COMMENT "Opening serial monitor")
+
+# micro-ROS 설정 (향후 확장용)
+option(ENABLE_MICROROS "Enable micro-ROS support" OFF)
+if(ENABLE_MICROROS)
+    add_definitions(-DMICROROS_ENABLED)
+    message(STATUS "micro-ROS 지원이 활성화되었습니다")
+endif()
+
+# 정보 출력
+message(STATUS "=== 프로젝트 설정 완료 ===")
+message(STATUS "프로젝트: ${PROJECT_NAME}")
+message(STATUS "MCU: ${MCU_MODEL}")
+message(STATUS "툴체인: ${CMAKE_C_COMPILER}")
+message(STATUS "링커 스크립트: ${LINKER_SCRIPT}")
+message(STATUS "스타트업 파일: ${STARTUP_FILE}")
+message(STATUS "빌드 타입: ${CMAKE_BUILD_TYPE}")
