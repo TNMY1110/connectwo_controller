@@ -34,19 +34,13 @@
 #include "nav_msgs/Odometry.h"
 
 
-#include "StateMachine.h"
 
-#define ROS_MODE 1
-#define ARDUINO_MODE 2
-
-int nowMode = 0;
 
 extern CAN_HandleTypeDef hcan1;
 
 std_msgs::String str_msg;
 
 ros::Publisher pub_str("/tresc3/chatter", &str_msg);
-ros::Publisher pub_imu("/imu", &imu_msg);
 
 char hello[] = "hello world!";
 
@@ -68,12 +62,6 @@ PeriphGPIO __led1(LED1_GPIO_Port, LED1_Pin, 100);
 PeriphGPIO __led2(LED2_GPIO_Port, LED2_Pin, 100);
 PeriphGPIO __led3(LED3_GPIO_Port, LED3_Pin, 100);
 
-PeriphGPIO __id0(ID0_GPIO_Port, ID0_Pin);
-PeriphGPIO __id1(ID1_GPIO_Port, ID1_Pin);
-PeriphGPIO __id2(ID2_GPIO_Port, ID2_Pin);
-PeriphGPIO __id3(ID3_GPIO_Port, ID3_Pin);
-
-std::list<PeriphGPIO> __ids{PeriphGPIO(ID0_GPIO_Port, ID0_Pin), PeriphGPIO(ID1_GPIO_Port, ID1_Pin), PeriphGPIO(ID2_GPIO_Port, ID2_Pin), PeriphGPIO(ID3_GPIO_Port, ID3_Pin)};
 
 extern CAN_HandleTypeDef hcan1;
 Ahrsv1 __imu(&hcan1, (CAN_Handler_t )
@@ -104,7 +92,6 @@ Motor<long> motor[4] = { { &htim8, &htim4, (uint32_t) TIM_CHANNEL_4,
 
 Nonholonomic dynamics(0.065, 0.125, 1664, 0.02);
 
-tresc3::StateMachine machine;
 
 void systemReset() {
     HAL_NVIC_SystemReset();
@@ -119,115 +106,41 @@ long target_l = 0;
 long target_r = 0;
 
 
-std::array<int, 4> read_ids()
-{
-	std::array<int, 4> state;
-	int i = 0;
-	std::for_each(__ids.begin(), __ids.end(), [&](auto &periphGpio){
-		state[i++] = periphGpio.read();
-	});
-	return state;
-}
 
 void ros_init(void) {
-    auto idState = read_ids();
-    /* Check arduino state */
-    if(idState[0])
-    {
-    	nowMode = ARDUINO_MODE;
+    nh.initNode();
+    nh.advertise(pub_str);
+    nh.advertise(imu_pub);
+    nh.advertise(odom_pub);
+    nh.advertise(joint_states_pub);
+    nh.subscribe(cmdVelSub);
 
-        HAL_TIM_Base_Start_IT(&htim6);
-        HAL_TIM_Base_Start_IT(&htim7);
-        HAL_TIM_Base_Start_IT(&htim14);
-
-        for(int i = 0; i < 4; i++) {
-            motor[i].reset();
-            motor[i].start();
-        }
-        HAL_Delay(4000);
-
-        __imu.init();
-        __imu.setDataType(1, 1, 1, 1);
-        __imu.setPeriod(10);
-		printf("Arduino mode init complete.\r\n");
+    for(int i = 0; i < 4; i++) {
+        motor[i].reset();
+        motor[i].start();
     }
-    else
-    {
-    	nowMode = ROS_MODE;
-        nh.initNode();
-        nh.advertise(pub_str);
-//        nh.advertise(pub_imu);
-        nh.advertise(imu_pub);
-        nh.subscribe(cmdVelSub);
+    HAL_Delay(4000);
 
-        for(int i = 0; i < 4; i++) {
-            motor[i].reset();
-            motor[i].start();
-        }
-        HAL_Delay(4000);
+    HAL_TIM_Base_Start_IT(&htim6);
+    HAL_TIM_Base_Start_IT(&htim7);
+    HAL_TIM_Base_Start_IT(&htim14);
 
-        HAL_TIM_Base_Start_IT(&htim6);
-        HAL_TIM_Base_Start_IT(&htim7);
-        HAL_TIM_Base_Start_IT(&htim14);
+    __imu.init();
+    __imu.setDataType(1, 1, 1, 1);
+    __imu.setPeriod(10);
 
-        __imu.init();
-        __imu.setDataType(1, 1, 1, 1);
-        __imu.setPeriod(10);
+    initOdom();
+    initJointStates();
+    tf_broadcaster.init(nh);
+    printf("ROS mode init complete.\r\n");
 
-        initOdom();
-        initJointStates();
-        tf_broadcaster.init(nh);
-		printf("ROS mode init complete.\r\n");
-    }
-    machine.resetPacket();
     __usart3.init();
     __usart5.init();
-	printf("Init process complete.\r\n");
+    printf("Init process complete.\r\n");
 }
 
 
-uint8_t tempData[100];
-uint8_t cnt = 0;
 
-uint32_t makeImuPacket(uint16_t cmd, uint8_t *target, double roll, double pitch, double yaw)
-{
-	int rollData = (int)(roll * 1000);
-	int pitchData = (int)(pitch * 1000);
-	int yawData = (int)(yaw * 1000);
-
-	uint8_t checkSum = 0;
-	uint16_t length = 12;
-
-	target[0] = 0xFF;
-	target[1] = 0xFF;
-	target[2] = (uint8_t)cmd;
-	target[3] = (uint8_t)(cmd >> 8);
-	target[4] = (uint8_t)length;
-	target[5] = (uint8_t)(length >> 8);
-
-	target[6] = (uint8_t)rollData;
-	target[7] = (uint8_t)(rollData >> 8);
-	target[8] = (uint8_t)(rollData >> 16);
-	target[9] = (uint8_t)(rollData >> 24);
-
-	target[10] = (uint8_t)pitchData;
-	target[11] = (uint8_t)(pitchData >> 8);
-	target[12] = (uint8_t)(pitchData >> 16);
-	target[13] = (uint8_t)(pitchData >> 24);
-
-	target[14] = (uint8_t)yawData;
-	target[15] = (uint8_t)(yawData >> 8);
-	target[16] = (uint8_t)(yawData >> 16);
-	target[17] = (uint8_t)(yawData >> 24);
-
-	for(int i = 6; i < 18; i ++)
-	{
-		checkSum += target[i];
-	}
-	target[18] = checkSum;
-
-	return 19;
-}
 
 void ros_run(void) {
     __ledState.run();
@@ -239,81 +152,19 @@ void ros_run(void) {
     updateVariable(nh.connected());
     updateTFPrefix(nh.connected());
 
-    if(nowMode == ARDUINO_MODE)
-    {
-    	while(true)
-    	{
-    		int data = __usart3.read();
-    		if(data == -1)
-    		{
-    			break;
-    		}
-    		if(machine.run(data))
-    		{
-    			printf("Complete machine.\r\n");
-    			tresc3::packet result = machine.getPacket();
-    			if(result.cmd == 3)
-    			{
-    				printf("Incoming task: set cmd_vel data.\r\n");
-    				int linearX = result.data[0];
-    				linearX |= result.data[1] << 8;
-    				linearX |= result.data[2] << 16;
-    				linearX |= result.data[3] << 24;
-    				int angularZ = result.data[20];
-    				angularZ |= result.data[21] << 8;
-    				angularZ |= result.data[22] << 16;
-    				angularZ |= result.data[23] << 24;
-
-    				double dlinearX = (double)linearX / 1000.0;
-    				double dAngularZ = (double)angularZ / 1000.0;
-
-
-    		        auto ret = dynamics.calc(dlinearX, dAngularZ);
-    		        target_l = static_cast<long>(ret.leftValue);
-    		        target_r = -static_cast<long>(ret.rightValue);
-    		        __led0.setPeriod(target_l);
-    		        __led1.setPeriod(target_l);
-    		        __led2.setPeriod(target_r);
-    		        __led3.setPeriod(target_r);
-    				printf("Complete led setup.\r\n");
-    			}
-    		}
-    	}
-
-
-		nowTick[chat_index] = HAL_GetTick();
-		if(nowTick[chat_index] - pastTick[chat_index] > 100) {
-    		printf("Make imu packet(100ms).\n\r");
-			pastTick[chat_index] = nowTick[chat_index];
-
-
-			uint8_t makeData[255] = {0,};
-			int size = makeImuPacket(2, makeData, __imu.data.e_roll, __imu.data.e_pitch, __imu.data.e_yaw);
-    		printf("Complete make imu packet.\n\r");
-			__usart3.write(makeData, size);
-    		printf("Send packet __uart3(Arduino).\n\r");
-		}
+    nowTick[chat_index] = HAL_GetTick();
+    if(nowTick[chat_index] - pastTick[chat_index] > 500) {
+        str_msg.data = hello;
+        pub_str.publish(&str_msg);
+        pastTick[chat_index] = nowTick[chat_index];
     }
-    else if(nowMode == ROS_MODE)
-    {
-		nowTick[chat_index] = HAL_GetTick();
-		if(nowTick[chat_index] - pastTick[chat_index] > 500) {
-			str_msg.data = hello;
-			pub_str.publish(&str_msg);
-			pastTick[chat_index] = nowTick[chat_index];
-		}
-		nowTick[imu_index] = HAL_GetTick();
-		if(nowTick[imu_index] - pastTick[imu_index] > 250) { // value less than 250 will occur error
-//			imu_msg.orientation.x = __imu.data.e_roll;
-//			imu_msg.orientation.y = __imu.data.e_pitch;
-//			imu_msg.orientation.z = __imu.data.e_yaw;
-//			pub_imu.publish(&imu_msg);
-			publishImuMsg();
-			pastTick[imu_index] = nowTick[imu_index];
-		}
-
-		nh.spinOnce();
+    nowTick[imu_index] = HAL_GetTick();
+    if(nowTick[imu_index] - pastTick[imu_index] > 250) {
+        publishImuMsg();
+        pastTick[imu_index] = nowTick[imu_index];
     }
+
+    nh.spinOnce();
 }
 
 void uart3TxCallback(UART_HandleTypeDef *huart) {
