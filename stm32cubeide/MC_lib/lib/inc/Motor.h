@@ -118,6 +118,16 @@ public:
 		return targetEncoder;
 	}
 
+	T getEncoderCount()
+	{
+		return encoderCnt;
+	}
+
+	uint32_t getCurrentEncoder()
+	{
+		return *CNTx;
+	}
+
 	void motorControl(T _target)
 	{
 	    T value;

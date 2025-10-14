@@ -99,6 +99,7 @@ void systemReset() {
 
 const int imu_index = 0;
 const int chat_index = 1;
+const int odom_index = 2;
 uint32_t nowTick[10] = { 0, };
 uint32_t pastTick[10] = { 0, };
 
@@ -164,16 +165,33 @@ void ros_run(void) {
         pastTick[imu_index] = nowTick[imu_index];
     }
 
+    nowTick[odom_index] = HAL_GetTick();
+    if(nowTick[odom_index] - pastTick[odom_index] > 20) {  // 50Hz (20ms)
+        // Read encoder values from motor instances
+        // Motor[0] and Motor[1] are left motors, Motor[2] and Motor[3] are right motors
+        int32_t left_tick = static_cast<int32_t>(motor[0].getEncoderCount());   // Left motor encoder
+        int32_t right_tick = static_cast<int32_t>(motor[2].getEncoderCount());  // Right motor encoder
+
+        // Debug: Print encoder values
+        // printf("Encoder L:%d R:%d\n\r", (int)left_tick, (int)right_tick);
+
+        // Update motor info with encoder data
+        updateMotorInfo(left_tick, right_tick);
+
+        // Publish odometry information
+        publishDriveInformation();
+
+        pastTick[odom_index] = nowTick[odom_index];
+    }
+
     nh.spinOnce();
 }
 
 void uart3TxCallback(UART_HandleTypeDef *huart) {
-//	nh.getHardware()->flush();
     __usart3.flush();
 }
 
 void uart3RxCallbcak(UART_HandleTypeDef *huart) {
-//	nh.getHardware()->reset_rbuf();
     __usart3.reset_rbuf();
 }
 
@@ -207,10 +225,10 @@ void timer15us(void) {
 }
 
 void timer1s(void) {
-	printf("timer1s \n\r");
-	printf("imu_x %d \n\r", (int)(__imu.data.e_roll * 1000));
-	printf("imu_y %d \n\r", (int)(__imu.data.e_pitch * 1000));
-	printf("imu_z %d \n\r", (int)(__imu.data.e_yaw * 1000));
+	// printf("timer1s \n\r");
+	// printf("imu_x %d \n\r", (int)(__imu.data.e_roll * 1000));
+	// printf("imu_y %d \n\r", (int)(__imu.data.e_pitch * 1000));
+	// printf("imu_z %d \n\r", (int)(__imu.data.e_yaw * 1000));
 }
 
 void cmdVelCallback(const geometry_msgs::Twist& msg) {
@@ -219,9 +237,9 @@ void cmdVelCallback(const geometry_msgs::Twist& msg) {
 //    target_r = -static_cast<long>(ret.rightValue);
     target_r = static_cast<long>(ret.leftValue);
     target_l = -static_cast<long>(ret.rightValue);
-    printf("hello? \n\r");
-    printf("target_l: %d\n\r", static_cast<int>(target_l));
-    printf("target_r: %d\n\r", static_cast<int>(target_r));
+    // printf("hello? \n\r");
+    // printf("target_l: %d\n\r", static_cast<int>(target_l));
+    // printf("target_r: %d\n\r", static_cast<int>(target_r));
 
     __led0.setPeriod(target_l);
     __led1.setPeriod(target_l);
@@ -242,7 +260,8 @@ int __printf__io__putchar(int ch) {
     uint8_t data = ch;
 
 //	TODO change MAX485 or CAN line
-    __usart5.write(&data, 1);
+    // Changed to USART2 for rosserial compatibility
+    HAL_UART_Transmit(&huart2, &data, 1, 100);
 
     return ch;
 }
