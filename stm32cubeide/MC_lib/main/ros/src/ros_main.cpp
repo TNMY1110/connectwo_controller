@@ -166,7 +166,7 @@ void ros_run(void) {
     }
 
     nowTick[odom_index] = HAL_GetTick();
-    if(nowTick[odom_index] - pastTick[odom_index] > 20) {  // 50Hz (20ms)
+    if(nowTick[odom_index] - pastTick[odom_index] > 100) {  // 10Hz (100ms)
         // Read encoder values from motor instances
         // Motor[0] and Motor[1] are left motors, Motor[2] and Motor[3] are right motors
         int32_t left_tick = static_cast<int32_t>(motor[0].getEncoderCount());   // Left motor encoder
