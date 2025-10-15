@@ -108,12 +108,11 @@ long target_r = 0;
 
 
 
+
 void ros_init(void) {
     nh.initNode();
     nh.advertise(pub_str);
     nh.advertise(imu_pub);
-    nh.advertise(odom_pub);
-    nh.advertise(joint_states_pub);
     nh.subscribe(cmdVelSub);
 
     for(int i = 0; i < 4; i++) {
@@ -130,9 +129,6 @@ void ros_init(void) {
     __imu.setDataType(1, 1, 1, 1);
     __imu.setPeriod(10);
 
-    initOdom();
-    initJointStates();
-    tf_broadcaster.init(nh);
     printf("ROS mode init complete.\r\n");
 
     __usart3.init();
@@ -165,24 +161,6 @@ void ros_run(void) {
         pastTick[imu_index] = nowTick[imu_index];
     }
 
-    nowTick[odom_index] = HAL_GetTick();
-    if(nowTick[odom_index] - pastTick[odom_index] > 100) {  // 10Hz (100ms)
-        // Read encoder values from motor instances
-        // Motor[0] and Motor[1] are left motors, Motor[2] and Motor[3] are right motors
-        int32_t left_tick = static_cast<int32_t>(motor[0].getEncoderCount());   // Left motor encoder
-        int32_t right_tick = static_cast<int32_t>(motor[2].getEncoderCount());  // Right motor encoder
-
-        // Debug: Print encoder values
-        // printf("Encoder L:%d R:%d\n\r", (int)left_tick, (int)right_tick);
-
-        // Update motor info with encoder data
-        updateMotorInfo(left_tick, right_tick);
-
-        // Publish odometry information
-        publishDriveInformation();
-
-        pastTick[odom_index] = nowTick[odom_index];
-    }
 
     nh.spinOnce();
 }
@@ -420,7 +398,7 @@ void publishDriveInformation(void)
 
 	// joint state
 	updateJointStates();
-	joint_states.header.stamp =stamp_now;
+	joint_states.header.stamp = stamp_now;
 	joint_states_pub.publish(&joint_states);
 }
 

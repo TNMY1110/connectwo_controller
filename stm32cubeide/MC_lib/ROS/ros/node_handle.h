@@ -92,7 +92,7 @@ const uint8_t MODE_MESSAGE        = 7;
 const uint8_t MODE_MSG_CHECKSUM   = 8;    // checksum for msg and topic id
 
 
-const uint8_t SERIAL_MSG_TIMEOUT  = 20;   // 20 milliseconds to recieve all of message data
+const uint8_t SERIAL_MSG_TIMEOUT  = 50;   // 50 milliseconds to receive all of message data
 
 using rosserial_msgs::TopicInfo;
 
