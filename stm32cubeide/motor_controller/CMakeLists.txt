@@ -70,7 +70,7 @@ include_directories(
     ${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver/Inc
     ${HAL_DRIVER_PATH}/STM32F4xx_HAL_Driver/Inc/Legacy
     ${HAL_DRIVER_PATH}/CMSIS/Device/ST/STM32F4xx/Include
-    ${HAL_DRIVER_PATH}/CMSIS/Core/Include
+    ${HAL_DRIVER_PATH}/CMSIS/Include
     # 기존 ROS 라이브러리
     # MC_lib 라이브러리 경로들
     ../MC_lib/lib/inc

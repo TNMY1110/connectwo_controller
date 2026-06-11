@@ -38,7 +38,7 @@ private:
 
 	T accTargetVel;
 	T accNowVel;
-	T accFactor = 3;
+	T accFactor = 1;
 
 public:
 	/*
@@ -111,6 +111,11 @@ public:
 			deltaEncoder = nowEncoder;
 		*CNTx = 0;
 		encoderCnt += deltaEncoder;
+	}
+
+	T getDeltaEncoderValue() 
+	{
+    	return deltaEncoder;
 	}
 
 	T getTargetEncoder()

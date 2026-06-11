@@ -33,6 +33,7 @@
 #include "geometry_msgs/Vector3.h"
 #include "nav_msgs/Odometry.h"
 
+;
 
 
 
@@ -90,8 +91,8 @@ Motor<long> motor[4] = { { &htim8, &htim4, (uint32_t) TIM_CHANNEL_4,
         (uint32_t *) &TIM8->CCR1, (uint32_t *) &TIM1->CNT, GPIOB, GPIO_PIN_2,
         pidSetting } };
 
-Nonholonomic dynamics(0.065, 0.125, 1664, 0.02);
-
+// r=반지름    l=휠간격/2    p=펄스/회전    t=제어주기
+Nonholonomic dynamics(WHEEL_RADIUS, (WHEEL_SEPARATION / 2), 1664, 0.01);
 
 void systemReset() {
     HAL_NVIC_SystemReset();
@@ -106,13 +107,14 @@ uint32_t pastTick[10] = { 0, };
 long target_l = 0;
 long target_r = 0;
 
-
-
+int32_t accumulated_left_tick = 0;
+int32_t accumulated_right_tick = 0;
 
 void ros_init(void) {
     nh.initNode();
     nh.advertise(pub_str);
     nh.advertise(imu_pub);
+	nh.advertise(odom_pub);
     nh.subscribe(cmdVelSub);
 
     for(int i = 0; i < 4; i++) {
@@ -129,11 +131,11 @@ void ros_init(void) {
     __imu.setDataType(1, 1, 1, 1);
     __imu.setPeriod(10);
 
-    printf("ROS mode init complete.\r\n");
+    // printf("ROS mode init complete.\r\n");
 
     __usart3.init();
     __usart5.init();
-    printf("Init process complete.\r\n");
+    // printf("Init process complete.\r\n");
 }
 
 
@@ -148,11 +150,20 @@ void ros_run(void) {
 
     updateVariable(nh.connected());
     updateTFPrefix(nh.connected());
-
+	
     nowTick[chat_index] = HAL_GetTick();
     if(nowTick[chat_index] - pastTick[chat_index] > 500) {
         str_msg.data = hello;
-        pub_str.publish(&str_msg);
+		// static char buf[120];
+
+        // sprintf(buf, "M0:%ld | M1:%ld | M2:%ld | M3:%ld", 
+        //         (long)motor[0].getEncoderCount(), 
+        //         (long)motor[1].getEncoderCount(), 
+        //         (long)motor[2].getEncoderCount(), 
+        //         (long)motor[3].getEncoderCount());
+
+		// str_msg.data = buf;
+		pub_str.publish(&str_msg);
         pastTick[chat_index] = nowTick[chat_index];
     }
     nowTick[imu_index] = HAL_GetTick();
@@ -160,7 +171,11 @@ void ros_run(void) {
         publishImuMsg();
         pastTick[imu_index] = nowTick[imu_index];
     }
-
+	nowTick[odom_index] = HAL_GetTick();
+    if(nowTick[odom_index] - pastTick[odom_index] > 50) {  // 25Hz
+        publishDriveInformation();
+        pastTick[odom_index] = nowTick[odom_index];
+    }
 
     nh.spinOnce();
 }
@@ -189,13 +204,26 @@ void uart5RxCallbcak(UART_HandleTypeDef *huart) {
 }
 
 void timer10ms(void) {
-    for(int i = 0; i < 4; i++) {
-        motor[0].motorControl(target_l);
-        motor[1].motorControl(target_l);
-        motor[2].motorControl(target_r);
-        motor[3].motorControl(target_r);
-    }
+	motor[0].motorControl(target_l);
+	motor[1].motorControl(target_l);
+	motor[2].motorControl(target_r);
+	motor[3].motorControl(target_r);
 
+	// 1. [왼쪽 바퀴 정산] 앞으로 갈 때(+), 뒤로 갈 때(-)인데 뒤로 갈 때 틱이 절반(800대)으로 깎이므로 조건부 2배
+    int32_t m0_raw = motor[0].getDeltaEncoderValue();
+    int32_t m1_raw = motor[1].getDeltaEncoderValue();
+    int32_t m0_calc = (m0_raw >= 0) ? m0_raw : m0_raw * 2;
+    int32_t m1_calc = (m1_raw >= 0) ? m1_raw : m1_raw * 2;
+
+    accumulated_left_tick += (m0_calc / 2 + m1_calc / 2);
+
+    // 2. [오른쪽 바퀴 정산] 앞으로 갈 때(-), 뒤로 갈 때(+)인데 앞으로 갈 때 틱이 절반으로 깎이므로 2를 곱하고, 부호 뒤집기(-)
+    int32_t m2_raw = motor[2].getDeltaEncoderValue();
+    int32_t m3_raw = motor[3].getDeltaEncoderValue();
+    int32_t m2_calc = (m2_raw < 0) ? -m2_raw * 2 : -m2_raw;
+    int32_t m3_calc = (m3_raw < 0) ? -m3_raw * 2 : -m3_raw;
+	
+    accumulated_right_tick += (m2_calc / 2 + m3_calc / 2);
 }
 
 void timer15us(void) {
@@ -237,7 +265,7 @@ void canRxCallback(CAN_HandleTypeDef *huart) {
 int __printf__io__putchar(int ch) {
     uint8_t data = ch;
 
-//	TODO change MAX485 or CAN line
+	//	TODO change MAX485 or CAN line
     // Changed to USART2 for rosserial compatibility
     HAL_UART_Transmit(&huart2, &data, 1, 100);
 
@@ -383,6 +411,21 @@ void publishDriveInformation(void)
 	prev_update_time = time_now;
     ros::Time stamp_now = rosNow();
 
+	// ros 통신 시작전 쌓인 쓰레기 방어용 코드
+	if (init_encoder) {
+        accumulated_left_tick = 0;
+        accumulated_right_tick = 0;
+        init_encoder = false;
+    }
+
+	// 누적된 틱을 오도메트리 연산용 변수(last_diff_tick)에 최종 전달
+	last_diff_tick[LEFT] = accumulated_left_tick;
+    last_diff_tick[RIGHT] = accumulated_right_tick;
+
+	// 다음 주기를 위해 누적 카운터는 0으로 클리어
+	accumulated_left_tick = 0;
+    accumulated_right_tick = 0;
+
 	// calculate odometry
 	calcOdometry((double)(step_time * 0.001));
 
@@ -390,16 +433,6 @@ void publishDriveInformation(void)
 	updateOdometry();
 	odom.header.stamp = stamp_now;
 	odom_pub.publish(&odom);
-
-	// odometry tf
-	updateTF(odom_tf);
-	odom_tf.header.stamp = stamp_now;
-	tf_broadcaster.sendTransform(odom_tf);
-
-	// joint state
-	updateJointStates();
-	joint_states.header.stamp = stamp_now;
-	joint_states_pub.publish(&joint_states);
 }
 
 ros::Time rosNow(void)
