@@ -4,7 +4,7 @@
 // AuCAR 설정값들
 #define AUCAR_MAX_SPEED     1000
 #define AUCAR_WHEEL_BASE    260   // mm
-#define AUCAR_WHEEL_RADIUS  57    // mm
+#define AUCAR_WHEEL_RADIUS  47    // mm
 
 // 모터 관련 설정
 #define AUCAR_MOTOR_COUNT   4

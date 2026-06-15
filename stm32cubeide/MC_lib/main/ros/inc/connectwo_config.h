@@ -35,8 +35,8 @@
 
 #define TICK2RAD                         0.0037759  // 0.087890625[deg] * 3.14159265359 / 180 = 0.001533981f
 
-#define WHEEL_RADIUS					0.057
-#define WHEEL_SEPARATION				0.377
+#define WHEEL_RADIUS					0.047
+#define WHEEL_SEPARATION				0.435
 
 
 void commandVelocityCallback(const geometry_msgs::Twist& cmd_vel_msg);

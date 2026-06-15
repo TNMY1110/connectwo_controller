@@ -153,16 +153,32 @@ public:
 		getDeltaEncoder();
 		nowOutput = pid.run(value, deltaEncoder);
 		pastEncoder = nowEncoder;
+
+		const T MIN_DRIVE_PWM = 200;
+
+		if (_target == 0)
+        {
+            *CCRx = 0;
+			return;
+        }
+
 		if (nowOutput < 0)
 		{
 			setDir(GPIO_PIN_RESET);
-			*CCRx = -nowOutput;
+			if (-nowOutput < MIN_DRIVE_PWM) 
+                *CCRx = MIN_DRIVE_PWM;
+            else
+                *CCRx = -nowOutput;
 		}
 		else
 		{
 			setDir(GPIO_PIN_SET);
-			*CCRx = nowOutput;
+			if (nowOutput < MIN_DRIVE_PWM) 
+                *CCRx = MIN_DRIVE_PWM;
+            else
+                *CCRx = nowOutput;
 		}
+		
 	}
 };
 
