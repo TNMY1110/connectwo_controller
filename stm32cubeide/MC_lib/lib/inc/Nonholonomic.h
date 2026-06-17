@@ -57,12 +57,26 @@ public:
 		motorValueTypeDef ret;
 		double l_value = 0;
 		double a_value = 0;
+		
 		if (_linearVelocity)
 			l_value = _linearVelocity * factor;
+
+		// 4륜 로봇은 바닥을 미끄러지며 돌아야 하므로 2륜 공식보다 훨씬 더 많은 바퀴 회전수가 필요함(보통 1.2배 ~ 1.8배)
 		if(_angularVelocity)
-			a_value = _angularVelocity * l * factor;
+		{
+			const double SKID_FACTOR = 1.3;
+			a_value = _angularVelocity * l * factor * SKID_FACTOR;
+		}
+
 		ret.rightValue = l_value + a_value;
 		ret.leftValue = l_value - a_value;
+
+		// 만약 완전히 제자리 회전 명령(선속도=0, 각속도만 존재)이 들어왔다면 마찰력을 확실히 이기도록 강하게 회전 토크를 걸어줌
+        if (_linearVelocity == 0 && _angularVelocity != 0) {
+            ret.rightValue *= 1.1; // 제자리 회전 시 10% 추가 증폭 (필요시 조정)
+            ret.leftValue  *= 1.1;
+        }
+
 		return ret;
 	}
 private:
