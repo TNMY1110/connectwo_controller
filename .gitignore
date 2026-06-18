@@ -68,6 +68,7 @@ CMakeLists.txt.user
 *.backup
 *.bak
 _backups/
+ROS_backup/
 
 # Temporary and log files
 *.log
