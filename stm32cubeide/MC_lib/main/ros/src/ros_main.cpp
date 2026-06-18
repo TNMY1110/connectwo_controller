@@ -32,22 +32,24 @@
 #include "sensor_msgs/JointState.h"
 #include "geometry_msgs/Vector3.h"
 #include "nav_msgs/Odometry.h"
-
-;
-
+#include "sensor_msgs/BatteryState.h"
 
 
 extern CAN_HandleTypeDef hcan1;
 
 std_msgs::String str_msg;
+sensor_msgs::BatteryState battery_msg;
 
 ros::Publisher pub_str("/tresc3/chatter", &str_msg);
+ros::Publisher battery_pub("/battery_state", &battery_msg);
 
 char hello[] = "hello world!";
 
 void
 cmdVelCallback(const geometry_msgs::Twist& msg);
 ros::Subscriber<geometry_msgs::Twist> cmdVelSub("cmd_vel", &cmdVelCallback);
+
+extern ADC_HandleTypeDef hadc1;		// 배터리용
 
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
@@ -101,6 +103,8 @@ void systemReset() {
 const int imu_index = 0;
 const int chat_index = 1;
 const int odom_index = 2;
+const int batt_index = 3;
+
 uint32_t nowTick[10] = { 0, };
 uint32_t pastTick[10] = { 0, };
 
@@ -110,12 +114,19 @@ long target_r = 0;
 int32_t accumulated_left_tick = 0;
 int32_t accumulated_right_tick = 0;
 
+float filtered_voltage = 0.0f;
+bool voltage_initialized = false;
+
 void ros_init(void) {
     nh.initNode();
     nh.advertise(pub_str);
     nh.advertise(imu_pub);
 	nh.advertise(odom_pub);
     nh.subscribe(cmdVelSub);
+	nh.advertise(battery_pub);
+
+	battery_msg.present = true;
+	battery_msg.power_supply_technology = sensor_msgs::BatteryState::POWER_SUPPLY_TECHNOLOGY_LIPO;
 
     for(int i = 0; i < 4; i++) {
         motor[i].reset();
@@ -137,8 +148,6 @@ void ros_init(void) {
     __usart5.init();
     // printf("Init process complete.\r\n");
 }
-
-
 
 
 void ros_run(void) {
@@ -175,6 +184,11 @@ void ros_run(void) {
     if(nowTick[odom_index] - pastTick[odom_index] > 50) {  // 25Hz
         publishDriveInformation();
         pastTick[odom_index] = nowTick[odom_index];
+    }
+	nowTick[batt_index] = HAL_GetTick();
+    if(nowTick[batt_index] - pastTick[batt_index] > 1000) {  // 1초(1Hz) 마다 발행
+        publishBatteryState();
+        pastTick[batt_index] = nowTick[batt_index];
     }
 
     nh.spinOnce();
@@ -435,6 +449,40 @@ void publishDriveInformation(void)
 	odom_pub.publish(&odom);
 }
 
+void publishBatteryState(void) 
+{
+    uint32_t adc_val = 0;
+    float battery_volt = 0.0f;
+
+    HAL_ADC_Start(&hadc1);
+    if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {
+        adc_val = HAL_ADC_GetValue(&hadc1);
+        float v_out = (adc_val * 3.3f) / 4095.0f;
+        battery_volt = v_out * 28.193f;
+    }
+    HAL_ADC_Stop(&hadc1);
+
+    // 지수 이동 평균(EMA) 필터로 노이즈 완화
+    if (!voltage_initialized) {
+        filtered_voltage = battery_volt;
+        voltage_initialized = true;
+    } else {
+        const float ALPHA = 0.1f; // 0.0~1.0, 작을수록 더 부드러움
+        filtered_voltage = ALPHA * battery_volt + (1.0f - ALPHA) * filtered_voltage;
+    }
+
+    battery_msg.header.stamp = rosNow();
+    battery_msg.header.frame_id = "base_link";
+    battery_msg.voltage = filtered_voltage;
+
+    float pct = (filtered_voltage - 10.5f) / (12.6f - 10.5f);
+    if (pct > 1.0f) pct = 1.0f;
+    if (pct < 0.0f) pct = 0.0f;
+    battery_msg.percentage = pct;
+
+    battery_pub.publish(&battery_msg);
+}
+
 ros::Time rosNow(void)
 {
 	  return nh.now();
@@ -662,5 +710,3 @@ bool calcOdometry(double diff_time)
 
 	return true;
 }
-
-

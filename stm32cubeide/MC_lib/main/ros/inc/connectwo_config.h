@@ -46,6 +46,7 @@ void publishImuMsg(void);
 void publishMagMsg(void);
 void publishSensorStateMsg(void);
 void publishDriveInformation(void);
+void publishBatteryState(void);
 
 ros::Time rosNow(void);
 ros::Time addMicros(ros::Time & t, uint32_t _micros); // deprecated
@@ -64,6 +65,7 @@ void initOdom();
 void initJointStates();
 
 bool calcOdometry(double diff_time);
+
 
 /*******************************************************************************
 * ROS NodeHandle
