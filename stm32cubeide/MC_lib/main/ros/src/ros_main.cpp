@@ -116,9 +116,6 @@ int32_t accumulated_right_tick = 0;
 float filtered_voltage = 0.0f;
 bool voltage_initialized = false;
 
-uint32_t last_cmd_vel_time = 0;
-const uint32_t CMD_VEL_TIMEOUT = 500; 
-
 void ros_init(void) {
     nh.initNode();
     nh.advertise(pub_str);
@@ -254,8 +251,6 @@ void timer1s(void) {
 }
 
 void cmdVelCallback(const geometry_msgs::Twist& msg) {
-	last_cmd_vel_time = HAL_GetTick();
-	
     auto ret = dynamics.calc(msg.linear.x, msg.angular.z);
 
     target_r = static_cast<long>(ret.leftValue);
