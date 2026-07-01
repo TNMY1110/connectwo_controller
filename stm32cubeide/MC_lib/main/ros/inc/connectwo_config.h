@@ -35,7 +35,7 @@
 
 #define TICK2RAD                         0.0037759  // 0.087890625[deg] * 3.14159265359 / 180 = 0.001533981f
 
-#define WHEEL_RADIUS					0.047
+#define WHEEL_RADIUS					0.0433
 #define WHEEL_SEPARATION				0.377
 
 
@@ -138,8 +138,8 @@ float goal_velocity_from_cmd[WHEEL_NUM] = {0.0, 0.0};
 /*******************************************************************************
 * Declaration for SLAM and navigation
 *******************************************************************************/
-unsigned long prev_update_time;
-float odom_pose[3];
+uint32_t prev_update_time = 0;
+double odom_pose[3];
 double odom_vel[3];
 
 

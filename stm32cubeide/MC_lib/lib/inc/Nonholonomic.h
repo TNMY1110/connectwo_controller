@@ -45,7 +45,7 @@ public:
 	 * */
 	Nonholonomic(double _r, double _l, double _p, double _t) :
 			r(_r), l(_l), p(_p), t(_t) {
-		factor = p * t / 6.28 / r;
+		factor = p * t / (2.0 * M_PI) / r;
 	}
 	;
 	~Nonholonomic() {

@@ -45,8 +45,7 @@ ros::Publisher battery_pub("/battery_state", &battery_msg);
 
 char hello[] = "hello world!";
 
-void
-cmdVelCallback(const geometry_msgs::Twist& msg);
+void cmdVelCallback(const geometry_msgs::Twist& msg);
 ros::Subscriber<geometry_msgs::Twist> cmdVelSub("cmd_vel", &cmdVelCallback);
 
 extern ADC_HandleTypeDef hadc1;		// 배터리용
@@ -116,6 +115,9 @@ int32_t accumulated_right_tick = 0;
 
 float filtered_voltage = 0.0f;
 bool voltage_initialized = false;
+
+uint32_t last_cmd_vel_time = 0;
+const uint32_t CMD_VEL_TIMEOUT = 500; 
 
 void ros_init(void) {
     nh.initNode();
@@ -252,14 +254,12 @@ void timer1s(void) {
 }
 
 void cmdVelCallback(const geometry_msgs::Twist& msg) {
+	last_cmd_vel_time = HAL_GetTick();
+	
     auto ret = dynamics.calc(msg.linear.x, msg.angular.z);
-//    target_l = static_cast<long>(ret.leftValue);
-//    target_r = -static_cast<long>(ret.rightValue);
+
     target_r = static_cast<long>(ret.leftValue);
     target_l = -static_cast<long>(ret.rightValue);
-    // printf("hello? \n\r");
-    // printf("target_l: %d\n\r", static_cast<int>(target_l));
-    // printf("target_r: %d\n\r", static_cast<int>(target_r));
 
     __led0.setPeriod(target_l);
     __led1.setPeriod(target_l);
@@ -384,9 +384,9 @@ void publishImuMsg(void)
 	float yaw__ = DEG2RAD(__imu.data.e_yaw);
 
 
-	float halfYaw = yaw__ * 0.5;
-	float halfPitch = pitch__ * 0.5;
-	float halfRoll = roll__ * 0.5;
+	float halfYaw = yaw__ * 0.5f;
+	float halfPitch = pitch__ * 0.5f;
+	float halfRoll = roll__ * 0.5f;
 	float cosYaw = cos(halfYaw);
 	float sinYaw = sin(halfYaw);
 	float cosPitch = cos(halfPitch);
@@ -419,8 +419,8 @@ void publishSensorStateMsg(void)
 }
 void publishDriveInformation(void)
 {
-	unsigned long time_now = HAL_GetTick();
-	unsigned long step_time = time_now - prev_update_time;
+	uint32_t time_now = HAL_GetTick();
+	uint32_t step_time = time_now - prev_update_time;
 
 	prev_update_time = time_now;
     ros::Time stamp_now = rosNow();
